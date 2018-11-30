@@ -9,12 +9,12 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const express = require('express');
 const multer = require('multer');
 const csurf = require('csurf');
 const csv = require('csv');
 const fs = require('fs');
+const util = require('util');
 const stream = require('stream');
 
 const db = require('../util/db');
@@ -119,7 +119,7 @@ async function doCreate(req, res) {
         res.redirect(303, '/thingpedia/strings');
     } finally {
         if (req.files.upload && req.files.upload.length)
-            await Q.nfcall(fs.unlink, req.files.upload[0].path);
+            await util.promisify(fs.unlink)(req.files.upload[0].path);
     }
 }
 

@@ -9,7 +9,6 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const express = require('express');
 const path = require('path');
 const lunr = require('lunr');
@@ -26,7 +25,7 @@ function prepareUserInfo(req) {
     return Promise.resolve().then(() => {
         if (req.user && req.user.developer_org !== null) {
             return db.withClient((dbClient) => {
-                return Q.all([
+                return Promise.all([
                     organization.get(dbClient, req.user.developer_org),
                     organization.getMembers(dbClient, req.user.developer_org),
                     device.getByOwner(dbClient, req.user.developer_org),

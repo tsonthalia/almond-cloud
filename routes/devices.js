@@ -51,7 +51,7 @@ router.post('/create', user.requireLogIn, (req, res, next) => {
     }).catch((e) => {
         res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
 router.post('/delete', user.requireLogIn, (req, res, next) => {
@@ -78,7 +78,7 @@ router.post('/delete', user.requireLogIn, (req, res, next) => {
     }).catch((e) => {
         res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
 // special case google because we have login with google
@@ -111,7 +111,7 @@ router.get('/oauth2/:kind', user.redirectLogIn, (req, res, next) => {
     }).catch((e) => {
         res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
 module.exports = router;

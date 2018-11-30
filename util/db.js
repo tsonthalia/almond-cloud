@@ -10,7 +10,7 @@
 "use strict";
 
 const mysql = require('mysql');
-const Q = require('q');
+const util = require('util');
 
 function getDB() {
     var url = process.env.DATABASE_URL;
@@ -21,7 +21,14 @@ function getDB() {
 }
 
 function query(client, string, args) {
-    return Q.ninvoke(client, 'query', string, args);
+    return new Promise((resolve, reject) => {
+        client.query(string, args, (err, result, fields) => {
+            if (err)
+                reject(err);
+            else
+                resolve([result, fields]);
+        });
+    });
 }
 
 function rollback(client, err, done) {
@@ -61,7 +68,8 @@ function getPool() {
 }
 
 function connect() {
-    return Q.ninvoke(getPool(), 'getConnection').then((connection) => {
+    const pool = getPool();
+    return util.promisify(pool.getConnection).call(pool).then((connection) => {
         function done(error) {
             if (error !== undefined)
                 connection.destroy();
@@ -102,44 +110,34 @@ module.exports = {
         });
     },
 
-    withTransaction(transaction, isolationLevel = 'serializable') {
-        // NOTE: some part of the code still rely on db.withClient
-        // and db.withTransaction returning a Q.Promise rather than
-        // a native Promise (eg they use .done() or .finally())
-        // hence, you must not convert this function to async (as
-        // that always returns a native Promise)
-        // using async for callbacks is fine, as long as the first
-        // returned promise is Q.Promise
-
-        return connect().then(async ([client, done]) => {
-            // danger! we're pasting strings into SQL
-            // this is ok because the argument NEVER comes from user input
+    async withTransaction(transaction, isolationLevel = 'serializable') {
+        const [client, done] = await connect();
+        // danger! we're pasting strings into SQL
+        // this is ok because the argument NEVER comes from user input
+        try {
+            await query(client, `set transaction isolation level ${isolationLevel}`);
+            await query(client, 'start transaction');
             try {
-                await query(client, `set transaction isolation level ${isolationLevel}`);
-                await query(client, 'start transaction');
-                try {
-                    const result = await transaction(client);
-                    await query(client, 'commit');
-                    done();
-                    return result;
-                } catch(err) {
-                    await rollback(client, err, done);
-                    throw err;
-                }
-            } catch (error) {
-                done(error);
-                throw error;
+                const result = await transaction(client);
+                await query(client, 'commit');
+                done();
+                return result;
+            } catch(err) {
+                await rollback(client, err, done);
+                throw err;
             }
-        });
+        } catch (error) {
+            done(error);
+            throw error;
+        }
     },
 
-    insertOne(client, string, args) {
-        return query(client, string, args).then(([result, fields]) => {
-            if (result.insertId === undefined)
-                throw new Error("Row does not have ID");
+    async insertOne(client, string, args) {
+        const [result,] = await query(client, string, args);
+        if (result.insertId === undefined)
+            throw new Error("Row does not have ID");
 
-            return result.insertId;
-        });
+        return result.insertId;
     },
 
     selectOne,

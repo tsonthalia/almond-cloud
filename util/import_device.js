@@ -9,8 +9,8 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const fs = require('fs');
+const util = require('util');
 const JSZip = require('jszip');
 const ThingTalk = require('thingtalk');
 const stream = require('stream');
@@ -337,7 +337,7 @@ async function uploadIcon(primary_kind, iconPath, deleteAfterwards = true) {
         return result;
     } finally {
         if (deleteAfterwards)
-            await Q.nfcall(fs.unlink, iconPath);
+            await util.promisify(fs.unlink)(iconPath);
     }
 }
 

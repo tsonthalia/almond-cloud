@@ -9,7 +9,6 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const express = require('express');
 const passport = require('passport');
 
@@ -132,7 +131,7 @@ router.post('/', (req, res, next) => {
             }
         });
     }
-}, (req, res) => {
+}, (req, res, next) => {
     console.log('body', req.body);
 
     if (req.body.request.type === 'SessionEndedRequest') {
@@ -237,7 +236,7 @@ router.post('/', (req, res, next) => {
     let slot = slots? (slots.spotify_command ? 'spotify_command' : 'command') : text;
     const delegate = new AlexaDelegate(res, slot);
 
-    Q.try(() => {
+    Promise.resolve().then(() => {
         return EngineManager.get().getEngine(req.user.id);
     }).then((engine) => {
         return engine.assistant.getOrOpenConversation('alexa:' + req.body.session.sessionId,
@@ -246,7 +245,7 @@ router.post('/', (req, res, next) => {
         return conversation.handleCommand(text);
     }).then(() => {
         return delegate.flush();
-    });
+    }).catch(next);
 });
 
 module.exports = router;

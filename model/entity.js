@@ -10,7 +10,6 @@
 "use strict";
 
 const db = require('../util/db');
-const Q = require('q');
 
 module.exports = {
     create(client, entity) {
@@ -57,7 +56,7 @@ module.exports = {
 
     checkAllExist(client, ids) {
         if (ids.length === 0)
-            return Q();
+            return Promise.resolve();
         return db.selectAll(client, "select id from entity_names where language='en' and id in (?)", [ids]).then((rows) => {
             if (rows.length === ids.length)
                 return;

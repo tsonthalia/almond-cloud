@@ -9,7 +9,6 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const events = require('events');
 
 const Almond = require('almond-dialog-agent');
@@ -49,13 +48,13 @@ module.exports = class Assistant extends events.EventEmitter {
     }
 
     notifyAll(...data) {
-        return Q.all(Object.keys(this._conversations).map((id) => {
+        return Promise.all(Object.keys(this._conversations).map((id) => {
             return this._conversations[id].notify(...data);
         }));
     }
 
     notifyErrorAll(...data) {
-        return Q.all(Object.keys(this._conversations).map((id) => {
+        return Promise.all(Object.keys(this._conversations).map((id) => {
             return this._conversations[id].notifyError(...data);
         }));
     }

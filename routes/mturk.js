@@ -9,8 +9,8 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const fs = require('fs');
+const util = require('util');
 const csv = require('csv');
 const express = require('express');
 const db = require('../util/db');
@@ -27,9 +27,74 @@ const TokenizerService = require('../util/tokenizer_service');
 
 var router = express.Router();
 
+async function uploadBatch(dbClient, req) {
+    const batch = await model.create(dbClient, { name: req.body.name, submissions_per_hit: req.body.submissions_per_hit });
+    let minibatch = [];
+    let columns = ['batch'];
+    for (let i = 1; i < 5; i ++ ) {
+        columns.push(`id${i}`);
+        columns.push(`thingtalk${i}`);
+        columns.push(`sentence${i}`);
+    }
+    columns = columns.join(',');
+    function doInsert() {
+        let data = minibatch;
+        minibatch = [];
+        return db.insertOne(dbClient, `insert into mturk_input(${columns}) values ?`, [data]);
+    }
+
+    function finish() {
+        if (minibatch.length === 0)
+            return Promise.resolve();
+        return doInsert();
+    }
+
+    function insertOneHIT(programs) {
+        let row = [batch.id];
+        programs.forEach((p) => {
+            row.push(p.id);
+            row.push(p.code);
+            row.push(p.sentence);
+        });
+        minibatch.push(row);
+        if (minibatch.length < 100)
+            return Promise.resolve();
+        return doInsert();
+    }
+
+    const parser = csv.parse({ columns: true, delimiter: '\t' });
+    fs.createReadStream(req.files.upload[0].path).pipe(parser);
+
+    let promises = [];
+    let programs = [];
+    await new Promise((resolve, reject) => {
+        parser.on('data', (row) => {
+            programs.push(row);
+            if (programs.length === 4) {
+                promises.push(insertOneHIT(programs));
+                programs = [];
+            }
+        });
+        parser.on('error', reject);
+        parser.on('end', resolve);
+    });
+    await Promise.all(promises);
+    await finish();
+}
+async function createBatch(req, res) {
+    try {
+        await db.withTransaction((dbClient) => {
+            return uploadBatch(dbClient, req);
+        });
+    } finally {
+        await util.promisify(fs.unlink)(req.files.upload[0].path);
+    }
+    res.redirect(303, '/mturk');
+}
+
 router.post('/create', multer({ dest: platform.getTmpDir() }).fields([
     { name: 'upload', maxCount: 1 }
-]), csurf({ cookie: false }), user.requireRole(user.Role.ADMIN), (req, res) => {
+]), csurf({ cookie: false }), user.requireRole(user.Role.ADMIN), (req, res, next) => {
     if (!req.files.upload || !req.files.upload.length) {
         res.render('error', { page_title: req._("Thingpedia - Error"),
             message: req._("Must upload the CSV file")
@@ -37,72 +102,12 @@ router.post('/create', multer({ dest: platform.getTmpDir() }).fields([
         return;
     }
 
-    Q(db.withTransaction((dbClient) => {
-        return model.create(dbClient, { name: req.body.name, submissions_per_hit: req.body.submissions_per_hit }).then((batch) => {
-            let minibatch = [];
-            let columns = ['batch'];
-            for (let i = 1; i < 5; i ++ ) {
-                columns.push(`id${i}`);
-                columns.push(`thingtalk${i}`);
-                columns.push(`sentence${i}`);
-            }
-            columns = columns.join(',');
-            function doInsert() {
-                let data = minibatch;
-                minibatch = [];
-                return db.insertOne(dbClient, `insert into mturk_input(${columns}) values ?`, [data]);
-            }
-
-            function finish() {
-                if (minibatch.length === 0)
-                    return Promise.resolve();
-                return doInsert();
-            }
-
-            function insertOneHIT(programs) {
-                let row = [batch.id];
-                programs.forEach((p) => {
-                    row.push(p.id);
-                    row.push(p.code);
-                    row.push(p.sentence);
-                });
-                minibatch.push(row);
-                if (minibatch.length < 100)
-                    return Promise.resolve();
-                return doInsert();
-            }
-
-            const parser = csv.parse({ columns: true, delimiter: '\t' });
-            fs.createReadStream(req.files.upload[0].path).pipe(parser);
-
-            let promises = [];
-            let programs = [];
-            return new Promise((resolve, reject) => {
-                parser.on('data', (row) => {
-                    programs.push(row);
-                    if (programs.length === 4) {
-                        promises.push(insertOneHIT(programs));
-                        programs = [];
-                    }
-                });
-                parser.on('error', reject);
-                parser.on('end', resolve);
-            }).then(() => Promise.all(promises)).then(() => finish());
-        });
-    })).finally(() => {
-        return Q.nfcall(fs.unlink, req.files.upload[0].path);
-    }).then(() => {
-        res.redirect(303, '/mturk');
-    }).catch((e) => {
-        console.error(e.stack);
-        res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
-            message: e.message });
-    }).done();
+    createBatch(req, res).catch(next);
 });
 
 router.use(csurf({ cookie: false }));
 
-router.get('/', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.get('/', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     db.withClient((dbClient) => {
         return model.getBatches(dbClient);
     }).then((batches) => {
@@ -111,10 +116,10 @@ router.get('/', user.requireRole(user.Role.ADMIN), (req, res) => {
             batches: batches,
             csrfToken: req.csrfToken()
         });
-    });
+    }).catch(next);
 });
 
-router.get('/csv/:batch', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.get('/csv/:batch', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     db.withClient((dbClient) => {
         return new Promise((resolve, reject) => {
             res.set('Content-disposition', 'attachment; filename=mturk.csv');
@@ -133,14 +138,10 @@ router.get('/csv/:batch', user.requireRole(user.Role.ADMIN), (req, res) => {
             output.on('error', reject);
             res.on('finish', resolve);
         });
-    }).catch((e) => {
-        console.error(e.stack);
-        res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
-            message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.get('/validation/csv/:batch', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.get('/validation/csv/:batch', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     db.withClient((dbClient) => {
         return new Promise((resolve, reject) => {
             res.set('Content-disposition', 'attachment; filename=validate.csv');
@@ -159,11 +160,7 @@ router.get('/validation/csv/:batch', user.requireRole(user.Role.ADMIN), (req, re
             output.on('error', reject);
             res.on('finish', resolve);
         });
-    }).catch((e) => {
-        console.error(e.stack);
-        res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
-            message: e });
-    }).done();
+    }).catch(next);
 });
 
 function validateOne(dbClient, batchId, language, schemas, utterance, thingtalk) {
@@ -187,7 +184,7 @@ function validateOne(dbClient, batchId, language, schemas, utterance, thingtalk)
     });
 }
 
-router.post('/submit', (req, res) => {
+router.post('/submit', (req, res, next) => {
     let submissionId = (Math.random() + 1).toString(36).substring(2, 10) + (Math.random() + 1).toString(36).substring(2, 10);
     db.withTransaction((dbClient) => {
         let submissions = [];
@@ -231,10 +228,10 @@ router.post('/submit', (req, res) => {
         console.error(e.stack);
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
             message: 'Submission failed. Please contact the HIT requestor for further instructions.' });
-    }).done();
+    }).catch(next);
 });
 
-router.get(`/submit/:batch/:hit`, (req, res) => {
+router.get(`/submit/:batch/:hit`, (req, res, next) => {
     const batch = req.params.batch;
     const id = req.params.hit;
 
@@ -256,9 +253,7 @@ router.get(`/submit/:batch/:hit`, (req, res) => {
                               code: code,
                               sentences: sentences, 
                               csrfToken: req.csrfToken() });
-    }).catch((e) => {
-        res.render('error', { message: 'Page does not exist.'});
-    }).done();
+    }).catch(next);
 });
 
 module.exports = router;

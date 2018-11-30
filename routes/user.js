@@ -9,7 +9,6 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const Tp = require('thingpedia');
 const express = require('express');
 const passport = require('passport');
@@ -117,7 +116,14 @@ router.post('/register', (req, res, next) => {
     Promise.resolve().then(async () => {
         const user = await db.withTransaction(async (dbClient) => {
             const user = await userUtils.register(dbClient, req, options);
-            await Q.ninvoke(req, 'login', user);
+            await new Promise((resolve, reject) => {
+                req.login(user, (err) => {
+                    if (err)
+                        reject(err);
+                    else
+                        resolve();
+                });
+            });
             return user;
         });
         await EngineManager.get().startUser(user.id);

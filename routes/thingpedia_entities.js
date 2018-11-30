@@ -9,12 +9,12 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const express = require('express');
 const multer = require('multer');
 const csurf = require('csurf');
 const csv = require('csv');
 const fs = require('fs');
+const util = require('util');
 
 const db = require('../util/db');
 const model = require('../model/entity');
@@ -59,123 +59,125 @@ var router = express.Router();
     "limited", "systems", "fund", "first", "pharmaceuticals", "technologies", "company", "holdings",
     "international", "ltd", "group", "financial", "corp", "bancorp", "corporation"]);*/
 
-router.post('/create', multer({ dest: platform.getTmpDir() }).fields([
-    { name: 'upload', maxCount: 1 }
-]), csurf({ cookie: false }), user.requireLogIn, user.requireDeveloper(), (req, res) => {
+async function uploadEntity(dbClient, req) {
     const language = 'en';
 
-    Q(db.withTransaction((dbClient) => {
-        let match = NAME_REGEX.exec(req.body.entity_id);
-        if (match === null)
-            throw new Error('Invalid entity type ID');
-        if (!req.body.entity_name)
-            throw new Error('Invalid entity name');
+    let match = NAME_REGEX.exec(req.body.entity_id);
+    if (match === null)
+        throw new Error('Invalid entity type ID');
+    if (!req.body.entity_name)
+        throw new Error('Invalid entity name');
 
-        let [, prefix, /*suffix*/] = match;
+    let [, prefix, /*suffix*/] = match;
 
-        return Promise.resolve().then(() => {
-            if (req.user.developer_status < user.DeveloperStatus.ADMIN) {
-                return schemaModel.getByKind(dbClient, prefix).then((row) => {
-                    if (row.owner !== req.user.developer_org) throw new Error();
-                }).catch((e) => {
-                    console.log('err', e.message);
-                    throw new Error('The prefix of the entity ID must correspond to the ID of a Thingpedia device owned by your organization');
-                });
-            } else {
-                return Promise.resolve();
-            }
-        }).then(() => {
-            return model.create(dbClient, {
-                name: req.body.entity_name,
-                id: req.body.entity_id,
-                is_well_known: false,
-                has_ner_support: !req.body.no_ner_support
-            });
-        }).then((entity) => {
-            if (req.body.no_ner_support)
-                return Q();
+    if (req.user.developer_status < user.DeveloperStatus.ADMIN) {
+        try {
+            const row = await schemaModel.getByKind(dbClient, prefix);
+            if (row.owner !== req.user.developer_org) throw new Error();
+        } catch (e) {
+            console.log('err', e.message);
+            throw new Error('The prefix of the entity ID must correspond to the ID of a Thingpedia device owned by your organization');
+        }
+    }
 
-            if (!req.files.upload || !req.files.upload.length)
-                throw new Error(req._("You must upload a CSV file with the entity values."));
+    await model.create(dbClient, {
+        name: req.body.entity_name,
+        id: req.body.entity_id,
+        is_well_known: false,
+        has_ner_support: !req.body.no_ner_support
+    });
+    if (req.body.no_ner_support)
+        return;
 
-            let insertBatch = [];
+    if (!req.files.upload || !req.files.upload.length)
+        throw new Error(req._("You must upload a CSV file with the entity values."));
 
-            function insert(entityId, entityValue, entityCanonical, entityName) {
-                insertBatch.push([language, entityId, entityValue, entityCanonical, entityName]);
-                if (insertBatch.length < 100)
-                    return Promise.resolve();
+    let insertBatch = [];
 
-                let batch = insertBatch;
-                insertBatch = [];
-                return db.insertOne(dbClient,
-                    "insert ignore into entity_lexicon(language,entity_id,entity_value,entity_canonical,entity_name) values ?", [batch]);
-            }
-            function finish() {
-                if (insertBatch.length === 0)
-                    return Promise.resolve();
-                return db.insertOne(dbClient,
-                    "insert ignore into entity_lexicon(language,entity_id,entity_value,entity_canonical,entity_name) values ?", [insertBatch]);
-            }
+    function insert(entityId, entityValue, entityCanonical, entityName) {
+        insertBatch.push([language, entityId, entityValue, entityCanonical, entityName]);
+        if (insertBatch.length < 100)
+            return Promise.resolve();
 
-            const parser = csv.parse({ delimiter: ',' });
-            fs.createReadStream(req.files.upload[0].path).pipe(parser);
+        let batch = insertBatch;
+        insertBatch = [];
+        return db.insertOne(dbClient,
+            "insert ignore into entity_lexicon(language,entity_id,entity_value,entity_canonical,entity_name) values ?", [batch]);
+    }
+    function finish() {
+        if (insertBatch.length === 0)
+            return Promise.resolve();
+        return db.insertOne(dbClient,
+            "insert ignore into entity_lexicon(language,entity_id,entity_value,entity_canonical,entity_name) values ?", [insertBatch]);
+    }
 
-            const promises = [];
-            return new Promise((resolve, reject) => {
-                parser.on('data', (row) => {
-                    if (row.length !== 2) 
-                        return;
-                    
-                    const value = row[0].trim();
-                    const name = row[1];
+    const parser = csv.parse({ delimiter: ',' });
+    fs.createReadStream(req.files.upload[0].path).pipe(parser);
 
-                    const tokens = tokenizer.tokenize(name);
-                    const canonical = tokens.join(' ');
-                    promises.push(insert(req.body.entity_id, value, canonical, name));
-                });
-                parser.on('error', reject);
-                parser.on('end', resolve);
-            }).then(() => Promise.all(promises)).then(() => finish());
+    const promises = [];
+    await new Promise((resolve, reject) => {
+        parser.on('data', (row) => {
+            if (row.length !== 2)
+                return;
+
+            const value = row[0].trim();
+            const name = row[1];
+
+            const tokens = tokenizer.tokenize(name);
+            const canonical = tokens.join(' ');
+            promises.push(insert(req.body.entity_id, value, canonical, name));
         });
-    })).finally(() => {
-        if (!req.files.upload || !req.files.upload.length)
-            return Q();
-        return Q.nfcall(fs.unlink, req.files.upload[0].path);
-    }).then(() => {
+        parser.on('error', reject);
+        parser.on('end', resolve);
+    });
+    await Promise.all(promises);
+    await finish();
+}
+
+async function createEntity(req, res) {
+    try {
+        try {
+            await db.withTransaction((dbClient) => {
+                return uploadEntity(dbClient, req);
+            });
+        } finally {
+            if (req.files.upload && req.files.upload.length)
+                await util.promisify(fs.unlink)(req.files.upload[0].path);
+        }
+
         res.redirect(303, '/thingpedia/entities');
-    }).catch((e) => {
-        console.log(e.stack);
+    } catch (e) {
         res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }
+}
+
+router.post('/create', multer({ dest: platform.getTmpDir() }).fields([
+    { name: 'upload', maxCount: 1 }
+]), csurf({ cookie: false }), user.requireLogIn, user.requireDeveloper(), (req, res, next) => {
+    createEntity(req, res).catch(next);
 });
 
 router.use(csurf({ cookie: false }));
 
-router.get('/', (req, res) => {
+router.get('/', (req, res, next) => {
     db.withClient((dbClient) => {
         return model.getAll(dbClient);
     }).then((rows) => {
         res.render('thingpedia_entity_list', { page_title: req._("Thingpedia - Entity Types"),
                                                csrfToken: req.csrfToken(),
                                                entities: rows });
-    }).catch((e) => {
-        res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
-                                          message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.get('/by-id/:id', (req, res) => {
+router.get('/by-id/:id', (req, res, next) => {
     db.withClient((dbClient) => {
-        return Q.all([model.get(dbClient, req.params.id), model.getValues(dbClient, req.params.id)]);
+        return Promise.all([model.get(dbClient, req.params.id), model.getValues(dbClient, req.params.id)]);
     }).then(([entity, values]) => {
         res.render('thingpedia_entity_values', { page_title: req._("Thingpedia - Entity Values"),
                                                  entity: entity,
                                                  values: values });
-    }).catch((e) => {
-        res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
-                                          message: e });
-    }).done();
+    }).catch(next);
 });
 
 const NAME_REGEX = /([A-Za-z_][A-Za-z0-9_.-]*):([A-Za-z_][A-Za-z0-9_]*)/;

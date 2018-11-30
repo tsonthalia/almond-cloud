@@ -9,9 +9,9 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const express = require('express');
 const fs = require('fs');
+const util = require('util');
 const multer = require('multer');
 const csurf = require('csurf');
 
@@ -191,7 +191,7 @@ async function doCreateOrUpdate(kind, create, req, res) {
         var toDelete = [];
         if (req.files) {
             if (req.files.zipfile && req.files.zipfile.length)
-                toDelete.push(Q.nfcall(fs.unlink, req.files.zipfile[0].path));
+                toDelete.push(util.promisify(fs.unlink)(req.files.zipfile[0].path));
         }
         await Promise.all(toDelete);
     }

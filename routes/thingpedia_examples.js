@@ -17,44 +17,44 @@ const db = require('../util/db');
 
 var router = express.Router();
 
-router.post('/upvote/:id', (req, res) => {
+router.post('/upvote/:id', (req, res, next) => {
     db.withClient((dbClient) => {
         return model.upvote(dbClient, req.params.id);
     }).then(() => {
         res.json({ result: 'ok' });
     }, (e) => {
         res.status(400).json({ error: e.message });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/downvote/:id', (req, res) => {
+router.post('/downvote/:id', (req, res, next) => {
     db.withClient((dbClient) => {
         return model.downvote(dbClient, req.params.id);
     }).then(() => {
         res.json({ result: 'ok' });
     }, (e) => {
         res.status(400).json({ error: e.message });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/hide/:id', user.requireLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res) => {
+router.post('/hide/:id', user.requireLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res, next) => {
     db.withClient((dbClient) => {
         return model.hide(dbClient, req.params.id);
     }).then(() => {
         res.json({ result: 'ok' });
     }, (e) => {
         res.status(400).json({ error: e.message });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/delete/:id', user.requireLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res) => {
+router.post('/delete/:id', user.requireLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res, next) => {
     db.withClient((dbClient) => {
         return model.deleteById(dbClient, req.params.id);
     }).then(() => {
         res.json({ result: 'ok' });
     }, (e) => {
         res.status(400).json({ error: e.message });
-    }).done();
+    }).catch(next);
 });
 
 module.exports = router;

@@ -9,8 +9,9 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const crypto = require('crypto');
+const util = require('util');
+
 const db = require('./db');
 const model = require('../model/user');
 
@@ -27,7 +28,7 @@ var GOOGLE_CLIENT_ID = '739906609557-o52ck15e1ge7deb8l0e80q92mpua1p55.apps.googl
 const { OAUTH_REDIRECT_ORIGIN, GOOGLE_CLIENT_SECRET } = require('../config');
 
 function hashPassword(salt, password) {
-    return Q.nfcall(crypto.pbkdf2, password, salt, 10000, 32, 'sha1')
+    return util.promisify(crypto.pbkdf2)(password, salt, 10000, 32, 'sha1')
         .then((buffer) => buffer.toString('hex'));
 }
 
@@ -69,7 +70,7 @@ function authenticateGoogle(accessToken, refreshToken, profile, done) {
                                                       profileId: profile.id,
                                                       accessToken: accessToken,
                                                       refreshToken: refreshToken }, true);
-            }).done();
+            });
             return user;
         });
     }).nodeify(done);
@@ -84,7 +85,7 @@ function associateGoogle(user, accessToken, refreshToken, profile, done) {
                                                       profileId: profile.id,
                                                       accessToken: accessToken,
                                                       refreshToken: refreshToken }, true);
-            }).done();
+            });
             return user;
         });
     }).nodeify(done);
@@ -113,7 +114,7 @@ exports.initialize = function() {
             done(null, result[0], result[1]);
         }, (err) => {
             done(err);
-        }).done();
+        });
     }));
 
     function verifyCloudIdAuthToken(username, password, done) {
@@ -124,7 +125,7 @@ exports.initialize = function() {
 
                 return model.recordLogin(dbClient, rows[0].id).then(() => rows[0]);
             });
-        }).nodeify(done);
+        }).then((res) => done(null, res), (err) => done(err));
     }
 
     passport.use(new BasicStrategy(verifyCloudIdAuthToken));
@@ -148,7 +149,7 @@ exports.initialize = function() {
             done(null, result[0], { message: result[1] });
         }, (err) => {
             done(err);
-        }).done();
+        });
     }));
 
     passport.use(new GoogleOAuthStrategy({

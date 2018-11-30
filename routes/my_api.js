@@ -9,7 +9,6 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const express = require('express');
 const crypto = require('crypto');
 const passport = require('passport');
@@ -87,16 +86,13 @@ router.get('/parse', (req, res, next) => {
         return;
     }
 
-    Q.try(() => {
+    Promise.resolve().then(() => {
         return EngineManager.get().getEngine(req.user.id);
     }).then((engine) => {
         return engine.assistant.parse(query, targetJson);
     }).then((result) => {
         res.json(result);
-    }).catch((e) => {
-        console.error(e.stack);
-        res.status(500).json({error:e.message});
-    });
+    }).catch(next);
 });
 
 function describeApp(app) {
@@ -108,7 +104,7 @@ function describeApp(app) {
 }
 
 router.post('/apps/create', (req, res, next) => {
-    Q.try(() => {
+    Promise.resolve().then(() => {
         return EngineManager.get().getEngine(req.user.id);
     }).then((engine) => {
         return engine.assistant.createApp(req.body);
@@ -116,14 +112,11 @@ router.post('/apps/create', (req, res, next) => {
         if (result.error)
             res.status(400);
         res.json(result);
-    }).catch((e) => {
-        console.error(e.stack);
-        res.status(500).json({error:e.message});
-    });
+    }).catch(next);
 });
 
 router.get('/apps/list', (req, res, next) => {
-    Q.try(() => {
+    Promise.resolve().then(() => {
         return EngineManager.get().getEngine(req.user.id);
     }).then((engine) => {
         return engine.apps.getAllApps().then((apps) => {
@@ -131,14 +124,11 @@ router.get('/apps/list', (req, res, next) => {
         });
     }).then((result) => {
         res.json(result);
-    }).catch((e) => {
-        console.error(e.stack);
-        res.status(500).json({error:e.message});
-    });
+    }).catch(next);
 });
 
 router.get('/apps/get/:appId', (req, res, next) => {
-    Q.try(() => {
+    Promise.resolve().then(() => {
         return EngineManager.get().getEngine(req.user.id);
     }).then((engine) => {
         return engine.apps.getApp(req.params.appId).then((app) => {
@@ -151,14 +141,11 @@ router.get('/apps/get/:appId', (req, res, next) => {
         });
     }).then((result) => {
         res.json(result);
-    }).catch((e) => {
-        console.error(e.stack);
-        res.status(500).json({error:e.message});
-    });
+    }).catch(next);
 });
 
 router.post('/apps/delete/:appId', (req, res, next) => {
-    Q.try(() => {
+    Promise.resolve().then(() => {
         return EngineManager.get().getEngine(req.user.id);
     }).then((engine) => {
         return engine.apps.getApp(req.params.appId).then((app) => {
@@ -171,10 +158,7 @@ router.post('/apps/delete/:appId', (req, res, next) => {
         });
     }).then((result) => {
         res.json(result);
-    }).catch((e) => {
-        console.error(e.stack);
-        res.status(500).json({error:e.message});
-    });
+    }).catch(next);
 });
 
 class WebsocketApiDelegate {
@@ -197,7 +181,7 @@ WebsocketApiDelegate.prototype.$rpcMethods = ['send'];
 router.ws('/results', (ws, req, next) => {
     var user = req.user;
 
-    Q.try(() => {
+    Promise.resolve().then(() => {
         return EngineManager.get().getEngine(user.id);
     }).then((engine) => {
         const onclosed = (userId) => {

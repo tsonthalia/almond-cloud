@@ -55,7 +55,7 @@ router.get('/', user.redirectRole(user.Role.ADMIN), (req, res, next) => {
                                  csrfToken: req.csrfToken() });
 });
 
-router.get('/users', user.redirectRole(user.Role.ADMIN), (req, res) => {
+router.get('/users', user.redirectRole(user.Role.ADMIN), (req, res, next) => {
     let page = req.query.page;
     if (page === undefined)
         page = 0;
@@ -72,10 +72,10 @@ router.get('/users', user.redirectRole(user.Role.ADMIN), (req, res) => {
                                         page_num: page,
                                         search: '',
                                         USERS_PER_PAGE });
-    }).done();
+    }).catch(next);
 });
 
-router.get('/users/search', user.redirectRole(user.Role.ADMIN), (req, res) => {
+router.get('/users/search', user.redirectRole(user.Role.ADMIN), (req, res, next) => {
     db.withClient((dbClient) => {
         if (req.query.q !== '' && !isNaN(req.query.q))
             return Promise.all([model.get(dbClient, Number(req.query.q))]);
@@ -88,10 +88,10 @@ router.get('/users/search', user.redirectRole(user.Role.ADMIN), (req, res) => {
                                         page_num: 0,
                                         search: req.query.search,
                                         USERS_PER_PAGE });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/users/kill/all', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.post('/users/kill/all', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     const engineManager = EngineManager.get();
 
     Promise.resolve().then(() => {
@@ -104,7 +104,7 @@ router.post('/users/kill/all', user.requireRole(user.Role.ADMIN), (req, res) => 
     });
 });
 
-router.post('/users/kill/:id', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.post('/users/kill/:id', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     const engineManager = EngineManager.get();
 
     engineManager.killUser(parseInt(req.params.id)).then(() => {
@@ -112,10 +112,10 @@ router.post('/users/kill/:id', user.requireRole(user.Role.ADMIN), (req, res) => 
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/users/start/:id', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.post('/users/start/:id', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     const engineManager = EngineManager.get();
 
     engineManager.isRunning(parseInt(req.params.id)).then((isRunning) => {
@@ -130,7 +130,7 @@ router.post('/users/start/:id', user.requireRole(user.Role.ADMIN), (req, res) =>
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
 function getTraining(req, res) {
@@ -157,7 +157,7 @@ router.post('/training/kill', user.requireRole(user.Role.ADMIN), (req, res, next
     }).catch(next);
 });
 
-router.post('/users/delete/:id', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.post('/users/delete/:id', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     if (req.user.id === req.params.id) {
         res.render('error', { page_title: req._("Thingpedia - Error"),
                               message: req._("You cannot delete yourself") });
@@ -173,10 +173,10 @@ router.post('/users/delete/:id', user.requireRole(user.Role.ADMIN), (req, res) =
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/users/promote/:id', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.post('/users/promote/:id', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     let needsRestart = false;
 
     db.withTransaction((dbClient) => {
@@ -209,10 +209,10 @@ router.post('/users/promote/:id', user.requireRole(user.Role.ADMIN), (req, res) 
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/users/demote/:id', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.post('/users/demote/:id', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     if (req.user.id === req.params.id) {
         res.render('error', { page_title: req._("Thingpedia - Error"),
                               message: req._("You cannot demote yourself") });
@@ -230,10 +230,10 @@ router.post('/users/demote/:id', user.requireRole(user.Role.ADMIN), (req, res) =
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/users/revoke-developer/:id', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.post('/users/revoke-developer/:id', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     if (req.user.id === req.params.id) {
         res.render('error', { page_title: req._("Thingpedia - Error"),
                               message: req._("You cannot revoke your own dev credentials yourself") });
@@ -249,10 +249,10 @@ router.post('/users/revoke-developer/:id', user.requireRole(user.Role.ADMIN), (r
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.get('/review-queue', user.redirectLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res) => {
+router.get('/review-queue', user.redirectLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res, next) => {
     let page = req.query.page;
     if (page === undefined)
         page = 0;
@@ -268,10 +268,10 @@ router.get('/review-queue', user.redirectLogIn, user.requireDeveloper(user.Devel
                                            devices: devices,
                                            page_num: page,
                                            DEVICES_PER_PAGE });
-    }).done();
+    }).catch(next);
 });
 
-router.get('/organizations', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.get('/organizations', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     let page = req.query.page;
     if (page === undefined)
         page = 0;
@@ -290,10 +290,10 @@ router.get('/organizations', user.requireRole(user.Role.ADMIN), (req, res) => {
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.get('/organizations/search', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.get('/organizations/search', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     if (!req.query.q) {
         res.redirect(303, '/admin/organizations');
         return;
@@ -310,10 +310,10 @@ router.get('/organizations/search', user.requireRole(user.Role.ADMIN), (req, res
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.get('/organizations/details/:id', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.get('/organizations/details/:id', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     db.withClient((dbClient) => {
         return Promise.all([
             organization.get(dbClient, req.params.id),
@@ -329,10 +329,10 @@ router.get('/organizations/details/:id', user.requireRole(user.Role.ADMIN), (req
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/organizations/add-member', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.post('/organizations/add-member', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     db.withTransaction((dbClient) => {
         return model.getByName(dbClient, req.body.username).then(([user]) => {
             if (!user)
@@ -348,10 +348,10 @@ router.post('/organizations/add-member', user.requireRole(user.Role.ADMIN), (req
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/organizations/set-name', user.requireRole(user.Role.ADMIN), (req, res) => {
+router.post('/organizations/set-name', user.requireRole(user.Role.ADMIN), (req, res, next) => {
     db.withTransaction((dbClient) => {
         return organization.update(dbClient, req.body.id, { name: req.body.name, comment: req.body.comment });
     }).then(() => {
@@ -359,7 +359,7 @@ router.post('/organizations/set-name', user.requireRole(user.Role.ADMIN), (req, 
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
 const BLOG_POSTS_PER_PAGE = 10;

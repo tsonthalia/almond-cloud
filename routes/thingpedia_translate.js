@@ -28,7 +28,7 @@ function localeToLanguage(locale) {
     return (locale || 'en').split(/[-_@.]/)[0];
 }
 
-router.get('/by-id/:kind', user.redirectLogIn, (req, res) => {
+router.get('/by-id/:kind', user.redirectLogIn, (req, res, next) => {
     const language = req.query.language || localeToLanguage(req.user.locale);
     if (language === 'en') {
         res.status(403).render('error', { page_title: req._("Thingpedia - Error"),
@@ -143,7 +143,7 @@ router.get('/by-id/:kind', user.redirectLogIn, (req, res) => {
         console.error(e.stack);
         res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
 function ensureExamples(dbClient, schemaId, ast, language) {
@@ -165,7 +165,7 @@ function ensureExamples(dbClient, schemaId, ast, language) {
     });
 }
 
-router.post('/by-id/:kind', user.requireLogIn, (req, res) => {
+router.post('/by-id/:kind', user.requireLogIn, (req, res, next) => {
     var language = req.body.language;
     if (!language) {
         res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
@@ -235,7 +235,7 @@ router.post('/by-id/:kind', user.requireLogIn, (req, res) => {
         console.error(e.stack);
         res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
 module.exports = router;

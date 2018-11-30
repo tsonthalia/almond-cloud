@@ -63,31 +63,25 @@ function getAllDevices(req, engine) {
     });
 }
 
-function getInfo(req) {
-    return EngineManager.get().isRunning(req.user.id).then((isRunning) => {
-        if (!isRunning)
-            return null;
+async function getInfo(req) {
+    const isRunning = await EngineManager.get().isRunning(req.user.id);
+    if (!isRunning)
+        return [isRunning, [], []];
+
+    const engine = await EngineManager.get().getEngine(req.user.id);
+    const [appinfo, devinfo] = await Promise.all([getAllApps(req, engine), getAllDevices(req, engine)]);
+    devinfo.sort((d1, d2) => {
+        if (d1.name < d2.name)
+            return -1;
+        else if (d1.name > d2.name)
+            return 1;
         else
-            return EngineManager.get().getEngine(req.user.id);
-    }).then((engine) => {
-        if (engine)
-            return Promise.all([true, getAllApps(req, engine), getAllDevices(req, engine)]);
-        else
-            return [false, [],[]];
-    }).then(([isRunning, appinfo, devinfo]) => {
-        devinfo.sort((d1, d2) => {
-            if (d1.name < d2.name)
-                return -1;
-            else if (d1.name > d2.name)
-                return 1;
-            else
-                return 0;
-        });
-        return [isRunning, appinfo, devinfo];
+            return 0;
     });
+    return [isRunning, appinfo, devinfo];
 }
 
-router.get('/', user.redirectLogIn, (req, res) => {
+router.get('/', user.redirectLogIn, (req, res, next) => {
     getInfo(req).then(([isRunning, appinfo, devinfo]) => {
         res.render('my_stuff', { page_title: req._("Thingpedia - My Almond"),
                                  messages: req.flash('app-message'),
@@ -97,14 +91,10 @@ router.get('/', user.redirectLogIn, (req, res) => {
                                  devices: devinfo,
                                  CDN_HOST: Config.CDN_HOST
                                 });
-    }).catch((e) => {
-        console.log(e.stack);
-        res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
-                                          message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/', user.redirectLogIn, (req, res) => {
+router.post('/', user.redirectLogIn, (req, res, next) => {
     getInfo(req).then(([isRunning, appinfo, devinfo]) => {
         res.render('my_stuff', { page_title: req._("Thingpedia - My Almond"),
             messages: req.flash('app-message'),
@@ -115,11 +105,7 @@ router.post('/', user.redirectLogIn, (req, res) => {
             CDN_HOST: Config.CDN_HOST,
             command: req.body.command
         });
-    }).catch((e) => {
-        console.log(e.stack);
-        res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
-            message: e });
-    }).done();
+    }).catch(next);
 });
 
 router.post('/apps/delete', user.requireLogIn, (req, res, next) => {
@@ -137,10 +123,7 @@ router.post('/apps/delete', user.requireLogIn, (req, res, next) => {
     }).then(() => {
         req.flash('app-message', "Application successfully deleted");
         res.redirect(303, '/me');
-    }).catch((e) => {
-        res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
-                                          message: e });
-    }).done();
+    }).catch(next);
 });
 
 router.get('/conversation', user.redirectLogIn, (req, res, next) => {

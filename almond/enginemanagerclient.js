@@ -9,7 +9,6 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
 const net = require('net');
 const events = require('events');
 const rpc = require('transparent-rpc');
@@ -62,46 +61,44 @@ class EngineManagerClient extends events.EventEmitter {
             deleted = true;
         });
 
-        var defer = Q.defer();
-        rpcSocket.on('error', (err) => {
+        const promise = new Promise((resolve, reject) => {
             // if we still can, catch the error early and fail the request
-            defer.reject(err);
+            rpcSocket.on('error', reject);
+            var initError = (msg) => {
+                if (msg.error)
+                    reject(new Error(msg.error));
+            };
+            jsonSocket.on('data', initError);
+
+            var stub = {
+                ready(engine, websocket, webhook, assistant) {
+                    jsonSocket.removeListener('data', initError);
+
+                    Promise.all([engine.apps, engine.devices, engine.messaging]).then(([apps, devices, messaging]) => {
+                        return {
+                            apps: apps,
+                            devices: devices,
+                            messaging: messaging,
+                            websocket: websocket,
+                            webhook: webhook,
+                            assistant: assistant
+                        };
+                    }).then(resolve, reject);
+                },
+                error(message) {
+                    reject(new Error(message));
+                },
+
+                $rpcMethods: ['ready', 'error']
+            };
+            var replyId = rpcSocket.addStub(stub);
+            jsonSocket.write({ control:'init', target: userId, replyId: replyId });
         });
-        var initError = (msg) => {
-            if (msg.error)
-                defer.reject(new Error(msg.error));
-        };
-        jsonSocket.on('data', initError);
-
-        var stub = {
-            ready(engine, websocket, webhook, assistant) {
-                jsonSocket.removeListener('data', initError);
-
-                Promise.all([engine.apps, engine.devices, engine.messaging]).then(([apps, devices, messaging]) => {
-                    return {
-                        apps: apps,
-                        devices: devices,
-                        messaging: messaging,
-                        websocket: websocket,
-                        webhook: webhook,
-                        assistant: assistant
-                    };
-                }).then((obj) => defer.resolve(obj), (error) => defer.reject(error));
-            },
-            error(message) {
-                defer.reject(new Error(message));
-            },
-
-            $rpcMethods: ['ready', 'error']
-        };
-        var replyId = rpcSocket.addStub(stub);
-        jsonSocket.write({ control:'init', target: userId, replyId: replyId });
-
         this._cachedEngines.set(userId, {
-            engine: defer.promise,
+            engine: promise,
             socket: rpcSocket
         });
-        return defer.promise;
+        return promise;
     }
 
     dispatchWebhook(userId, req, res) {
@@ -174,49 +171,49 @@ class EngineManagerClient extends events.EventEmitter {
 
     killAllUsers() {
         if (!this._rpcControl)
-            return Q(false);
+            return Promise.resolve(false);
         return this._rpcControl.killAllUsers();
     }
 
     isRunning(userId) {
         if (!this._rpcControl)
-             return Q(false);
+             return Promise.resolve(false);
         return this._rpcControl.isRunning(userId);
     }
 
     getProcessId(userId) {
         if (!this._rpcControl)
-            return Q(-1);
+            return Promise.resolve(-1);
         return this._rpcControl.getProcessId(userId);
     }
 
     startUser(userId) {
         if (!this._rpcControl)
-            return Q.reject(new Error('EngineManager died'));
+            return Promise.reject(new Error('EngineManager died'));
         return this._rpcControl.startUser(userId);
     }
 
     killUser(userId) {
         if (!this._rpcControl)
-            return Q.reject(new Error('EngineManager died'));
+            return Promise.reject(new Error('EngineManager died'));
         return this._rpcControl.killUser(userId);
     }
 
     deleteUser(userId) {
         if (!this._rpcControl)
-            return Q.reject(new Error('EngineManager died'));
+            return Promise.reject(new Error('EngineManager died'));
         return this._rpcControl.deleteUser(userId);
     }
 
     clearCache(userId) {
         if (!this._rpcControl)
-            return Q.reject(new Error('EngineManager died'));
+            return Promise.reject(new Error('EngineManager died'));
         return this._rpcControl.clearCache(userId);
     }
 
     restartUser(userId) {
         if (!this._rpcControl)
-            return Q.reject(new Error('EngineManager died'));
+            return Promise.reject(new Error('EngineManager died'));
         return this._rpcControl.restartUser(userId);
     }
 }

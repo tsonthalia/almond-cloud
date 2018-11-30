@@ -9,7 +9,7 @@
 // See COPYING for details
 "use strict";
 
-const Q = require('q');
+const util = require('util');
 const nodemailer = require('nodemailer');
 
 const { MAILGUN_USER, MAILGUN_PASSWORD }  = require('../config');
@@ -30,7 +30,8 @@ function ensureTransporter() {
 }
 
 module.exports = {
-   send(mailOptions) {
-       return Q.ninvoke(ensureTransporter(), 'sendMail', mailOptions);
-   }
+    send(mailOptions) {
+        const transporter = ensureTransporter();
+        return util.promisify(transporter.sendMail).call(transporter, mailOptions);
+    }
 };

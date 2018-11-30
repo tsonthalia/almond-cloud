@@ -56,7 +56,7 @@ function getCachedModules(userId) {
     });
 }
 
-router.get('/', user.redirectLogIn, (req, res) => {
+router.get('/', user.redirectLogIn, (req, res, next) => {
     getCachedModules(req.user.id).then((modules) => {
         return EngineManager.get().isRunning(req.user.id).then((isRunning) => {
             res.render('status', { page_title: req._("Thingpedia - Status"),
@@ -64,7 +64,7 @@ router.get('/', user.redirectLogIn, (req, res) => {
                                    modules: modules,
                                    isRunning: isRunning });
         });
-    }).done();
+    }).catch(next);
 });
 
 router.get('/logs', user.requireLogIn, user.requireDeveloper(), (req, res) => {
@@ -89,7 +89,7 @@ router.post('/kill', user.requireLogIn, (req, res) => {
     res.redirect(303, '/me/status');
 });
 
-router.post('/start', user.requireLogIn, (req, res) => {
+router.post('/start', user.requireLogIn, (req, res, next) => {
     var engineManager = EngineManager.get();
 
     engineManager.isRunning(req.user.id).then((isRunning) => {
@@ -101,10 +101,7 @@ router.post('/start', user.requireLogIn, (req, res) => {
         return engineManager.startUser(req.user.id);
     }).then(() => {
         res.redirect(303, '/me/status');
-    }).catch((e) => {
-        res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
-                                          message: e });
-    }).done();
+    }).catch(next);
 });
 
 router.post('/recovery/clear-cache', user.requireLogIn, (req, res, next) => {
@@ -138,15 +135,12 @@ router.post('/recovery/clear-data', user.requireLogIn, (req, res, next) => {
 });
 
 
-router.post('/update-module/:kind', user.requireLogIn, (req, res) => {
+router.post('/update-module/:kind', user.requireLogIn, (req, res, next) => {
     return EngineManager.get().getEngine(req.user.id).then((engine) => {
         return engine.devices.updateDevicesOfKind(req.params.kind);
     }).then(() => {
         res.redirect(303, '/me/status');
-    }).catch((e) => {
-        res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
-                                          message: e });
-    }).done();
+    }).catch(next);
 });
 
 module.exports = router; 

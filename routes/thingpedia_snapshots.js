@@ -17,7 +17,7 @@ const db = require('../util/db');
 
 const router = express.Router();
 
-router.get('/', user.redirectLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res) => {
+router.get('/', user.redirectLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res, next) => {
     let page = req.query.page;
     if (page === undefined)
         page = 0;
@@ -35,10 +35,10 @@ router.get('/', user.redirectLogIn, user.requireDeveloper(user.DeveloperStatus.A
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/create', user.requireLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res) => {
+router.post('/create', user.requireLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res, next) => {
     db.withTransaction((dbClient) => {
         var obj = {
             description: req.body.description || '',
@@ -49,7 +49,7 @@ router.post('/create', user.requireLogIn, user.requireDeveloper(user.DeveloperSt
     }).catch((e) => {
         res.status(500).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
 module.exports = router;

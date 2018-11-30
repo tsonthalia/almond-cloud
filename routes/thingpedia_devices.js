@@ -31,7 +31,7 @@ const codeStorage = require('../util/code_storage');
 
 var router = express.Router();
 
-router.get('/', (req, res) => {
+router.get('/', (req, res, next) => {
     res.redirect(301, '/thingpedia');
 });
 
@@ -127,7 +127,7 @@ router.post('/approve', user.requireLogIn, user.requireDeveloper(user.DeveloperS
     }).catch(next);
 });
 
-router.post('/unapprove', user.requireLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res) => {
+router.post('/unapprove', user.requireLogIn, user.requireDeveloper(user.DeveloperStatus.ADMIN), (req, res, next) => {
     db.withTransaction((dbClient) => {
         return Promise.all([
             model.unapprove(dbClient, req.body.kind),
@@ -138,10 +138,10 @@ router.post('/unapprove', user.requireLogIn, user.requireDeveloper(user.Develope
     }).catch((e) => {
         res.status(400).render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/delete', user.requireLogIn, user.requireDeveloper(),  (req, res) => {
+router.post('/delete', user.requireLogIn, user.requireDeveloper(),  (req, res, next) => {
     db.withTransaction(async (dbClient) => {
         const row = await model.getByPrimaryKind(dbClient, req.body.kind);
         if (row.owner !== req.user.developer_org &&
@@ -163,10 +163,10 @@ router.post('/delete', user.requireLogIn, user.requireDeveloper(),  (req, res) =
             res.status(400);
         res.render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e.message });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/train', user.requireLogIn, user.requireDeveloper(),  (req, res) => {
+router.post('/train', user.requireLogIn, user.requireDeveloper(),  (req, res, next) => {
     db.withTransaction(async (dbClient) => {
         const row = await model.getByPrimaryKind(dbClient, req.body.kind);
         if (row.owner !== req.user.developer_org &&
@@ -188,10 +188,10 @@ router.post('/train', user.requireLogIn, user.requireDeveloper(),  (req, res) =>
             res.status(400);
         res.render('error', { page_title: req._("Thingpedia - Error"),
                                           message: e.message });
-    }).done();
+    }).catch(next);
 });
 
-router.post('/request-approval', user.requireLogIn, user.requireDeveloper(), (req, res) => {
+router.post('/request-approval', user.requireLogIn, user.requireDeveloper(), (req, res, next) => {
     var mailOptions = {
         from: 'Thingpedia <noreply@thingpedia.stanford.edu>',
         to: 'thingpedia-admins@lists.stanford.edu',
